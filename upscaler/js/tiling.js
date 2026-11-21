@@ -29,7 +29,9 @@ export function targetSize(srcW, srcH, setting, limits) {
 
 /**
  * วางแผนขั้นตอนจากขนาดต้นฉบับไปขนาดเป้าหมาย
- * คืนรายการขั้นตอน: {type:'ai', w, h} = ให้ AI ขยายภาพขนาด w×h ขึ้น scale เท่า
+ * คืนรายการขั้นตอน: {type:'ai', w, h, outW, outH} = ให้ AI ขยายภาพขนาด w×h แล้ววางผลเป็นขนาด outW×outH
+ *                      (AI ขยายทีละชิ้น scale เท่า แล้วย่อชิ้นนั้นลงทันทีถ้าเป้าหมายเล็กกว่า
+ *                       จึงไม่ต้องสร้างภาพขนาด scale เท่าเต็มใบ ซึ่งอาจใหญ่เกินหน่วยความจำ)
  *                    {type:'resize', w, h} = ย่อ/ปรับขนาดธรรมดาให้ได้ w×h
  */
 export function planSteps(srcW, srcH, outW, outH, scale) {
@@ -38,14 +40,14 @@ export function planSteps(srcW, srcH, outW, outH, scale) {
   const steps = [];
   let w = srcW, h = srcH;
   for (let i = 0; i < passes; i++) {
-    if (i === passes - 1 && passes > 1) {
+    const last = i === passes - 1;
+    if (last && passes > 1) {
       const pw = Math.ceil(outW / scale), ph = Math.ceil(outH / scale);
       if (pw !== w || ph !== h) { steps.push({ type: 'resize', w: pw, h: ph }); w = pw; h = ph; }
     }
-    steps.push({ type: 'ai', w, h });
+    steps.push({ type: 'ai', w, h, outW: last ? outW : w * scale, outH: last ? outH : h * scale });
     w *= scale; h *= scale;
   }
-  if (w !== outW || h !== outH) steps.push({ type: 'resize', w: outW, h: outH });
   return steps;
 }
 

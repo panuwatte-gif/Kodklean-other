@@ -160,23 +160,54 @@ function writeTile(dst, tile, out, tw, th, pad) {
 
 class Cancelled extends Error {}
 
-async function aiPass(session, src, progress) {
+/** เขียนผลของชิ้นภาพแบบย่อ/ปรับขนาดลงปลายทางทันที (ใช้เมื่อเป้าหมายไม่ใช่ 4 เท่าพอดี) */
+function writeTileScaled(dst, tile, out, tw, th, pad, sx, sy, scratch) {
+  const OW = tw * SCALE, OH = th * SCALE, plane = OW * OH;
+  const img = new ImageData(OW, OH);
+  const p = img.data;
+  for (let s = 0, t = 0; s < plane; s++, t += 4) {
+    p[t] = out[s] * 255;
+    p[t + 1] = out[plane + s] * 255;
+    p[t + 2] = out[2 * plane + s] * 255;
+    p[t + 3] = 255;
+  }
+  scratch.ctx.putImageData(img, 0, 0);
+  // วางทั้งชิ้น (รวมขอบ) แต่ตัดให้เห็นเฉพาะส่วนกลาง เพื่อให้รอยต่อระหว่างชิ้นเนียน
+  const x0 = Math.round(tile.x * sx), x1 = Math.round((tile.x + tile.cw) * sx);
+  const y0 = Math.round(tile.y * sy), y1 = Math.round((tile.y + tile.ch) * sy);
+  const c = dst.ctx;
+  c.save();
+  c.beginPath();
+  c.rect(x0, y0, x1 - x0, y1 - y0);
+  c.clip();
+  c.imageSmoothingEnabled = true;
+  c.imageSmoothingQuality = 'high';
+  c.drawImage(scratch.canvas, (tile.x - pad) * sx, (tile.y - pad) * sy, tw * sx, th * sy);
+  c.restore();
+}
+
+async function aiPass(session, src, step, progress) {
   const W = src.canvas.width, H = src.canvas.height;
   const { size, pad } = CONFIG.tile;
   const { tw, th, tiles } = tileGrid(W, H, size, pad);
-  const dst = makeCanvas(W * SCALE, H * SCALE);
+  const dst = makeCanvas(step.outW, step.outH);
+  const exact = step.outW === W * SCALE && step.outH === H * SCALE;
+  const scratch = exact ? null : makeCanvas(tw * SCALE, th * SCALE);
+  const sx = step.outW / W, sy = step.outH / H;
   const buf = new Float32Array(3 * tw * th);
   try {
     for (const tile of tiles) {
       if (cancelRequested) throw new Cancelled();
       readTile(src, tile, tw, th, pad, buf);
       const result = await session.run({ input: new ort.Tensor('float32', buf, [1, 3, th, tw]) });
-      writeTile(dst, tile, result.output.data, tw, th, pad);
+      if (exact) writeTile(dst, tile, result.output.data, tw, th, pad);
+      else writeTileScaled(dst, tile, result.output.data, tw, th, pad, sx, sy, scratch);
       result.output.dispose?.();
       progress();
       await new Promise((r) => setTimeout(r, 0));   // เปิดช่องให้รับคำสั่ง "หยุด" ระหว่างชิ้น
     }
   } catch (e) { freeCanvas(dst); throw e; }
+  finally { freeCanvas(scratch); }
   return dst;
 }
 
@@ -208,7 +239,7 @@ async function process(job, useGpu) {
   let cur = source;
   try {
     for (const step of steps) {
-      const next = step.type === 'ai' ? await aiPass(session, cur, progress) : resize(cur, step.w, step.h);
+      const next = step.type === 'ai' ? await aiPass(session, cur, step, progress) : resize(cur, step.w, step.h);
       if (cur !== source) freeCanvas(cur);
       cur = next;
     }
