@@ -13,6 +13,8 @@ const el = {
   status: $('status'), items: $('items'), empty: $('empty'), engineInfo: $('engineInfo'),
   previewCard: $('previewCard'), previewNote: $('previewNote'), afterImg: $('afterImg'),
   beforeImg: $('beforeImg'), divider: $('divider'), slider: $('slider'),
+  pdfLongCm: $('pdfLongCm'), pdfPickBtn: $('pdfPickBtn'), pdfFileInput: $('pdfFileInput'),
+  pdfHint: $('pdfHint'), pdfItems: $('pdfItems'),
 };
 
 const state = {
@@ -24,6 +26,8 @@ const state = {
   stopping: false,
   selectedId: null,
   engine: null,
+  pdfLongCm: '',
+  pdfs: [],             // {id,name,status,url,bytes,info,error}
 };
 let nextId = 1;
 let worker = null;
@@ -47,6 +51,7 @@ function onWorkerMessage(msg) {
   if (msg.type === 'status') return setStatus(msg.text);
   if (msg.type === 'engine') { state.engine = msg; return renderEngine(); }
   if (msg.type === 'engineError') return setStatus('เตรียมโมเดลไม่สำเร็จ: ' + msg.message);
+  if (msg.type === 'pdfDone' || msg.type === 'pdfError') return onPdfMessage(msg);
   const item = state.items.find((i) => i.id === msg.id);
   if (msg.type === 'progress') {
     if (!item) return;
@@ -136,7 +141,7 @@ async function start() {
     if (msg.type === 'done') {
       item.status = 'done';
       item.result = { url: URL.createObjectURL(msg.blob), width: msg.width, height: msg.height, ms: msg.ms,
-        bytes: msg.blob.size, format: msg.format, backend: msg.backend,
+        blob: msg.blob, bytes: msg.blob.size, format: msg.format, backend: msg.backend,
         previewUrl: msg.preview ? URL.createObjectURL(msg.preview) : null };
       item.result.name = outputName(item, msg.format);
       state.selectedId = item.id;
@@ -167,6 +172,59 @@ function clearAll() {
   for (const item of state.items) { releaseResult(item); URL.revokeObjectURL(item.srcUrl); }
   state.items = []; state.selectedId = null;
   render();
+}
+
+// ---------- ทำไฟล์ PDF ส่งร้านพิมพ์ ----------
+const pdfLongCm = () => { const v = Number(state.pdfLongCm); return Number.isFinite(v) && v >= 1 && v <= 500 ? v : 0; };
+
+function requestPdf(file, name) {
+  const longCm = pdfLongCm();
+  if (!longCm) { el.pdfLongCm.focus(); el.pdfLongCm.scrollIntoView({ behavior: 'smooth', block: 'center' }); return render(); }
+  const stem = name.replace(/\.[^.]+$/, '');
+  const job = { id: nextId++, name: `${stem}_${longCm}cm.pdf`, status: 'working', url: null, bytes: 0, info: '', error: '' };
+  state.pdfs.push(job);
+  getWorker().postMessage({ type: 'pdf', job: { id: job.id, file, longCm } });
+  render();
+}
+
+function onPdfMessage(msg) {
+  const job = state.pdfs.find((p) => p.id === msg.id);
+  if (!job) return;
+  if (msg.type === 'pdfError') { job.status = 'error'; job.error = msg.message; return render(); }
+  job.status = 'done';
+  job.url = URL.createObjectURL(msg.blob);
+  job.bytes = msg.blob.size;
+  job.info = `หน้า ${msg.wCm} × ${msg.hCm} ซม. · รูป ${fmtDim(msg.width, msg.height)} พิกเซล = ${Math.round(msg.dpi)} DPI`
+    + (msg.reencoded ? ' · แปลงรูปเป็น JPG คุณภาพ 95%' : ' · ฝังรูป JPG ตามเดิม');
+  render();
+}
+
+function removePdf(id) {
+  const i = state.pdfs.findIndex((p) => p.id === id);
+  if (i < 0 || state.pdfs[i].status === 'working') return;
+  if (state.pdfs[i].url) URL.revokeObjectURL(state.pdfs[i].url);
+  state.pdfs.splice(i, 1);
+  render();
+}
+
+function renderPdf() {
+  const busy = state.pdfs.some((p) => p.status === 'working');
+  el.pdfLongCm.disabled = busy;
+  el.pdfPickBtn.disabled = state.running || busy;
+  el.pdfHint.textContent = state.pdfLongCm && !pdfLongCm() ? 'กรอกด้านยาวเป็นเซนติเมตร (1–500)'
+    : !pdfLongCm() ? 'กรอกด้านยาวของงานพิมพ์ก่อน เช่น ธง 50 × 150 ซม. ให้กรอก 150' : '';
+  el.pdfItems.replaceChildren(...state.pdfs.map((p) => {
+    const line = h('div', { className: 'meta state' });
+    const side = h('div', { className: 'side' });
+    if (p.status === 'working') line.textContent = 'กำลังทำ PDF…';
+    else if (p.status === 'error') { line.classList.add('bad'); line.textContent = p.error; }
+    else {
+      line.classList.add('ok'); line.textContent = `${p.info} · ${fmtBytes(p.bytes)}`;
+      side.append(h('a', { className: 'btn', href: p.url, download: p.name, textContent: 'ดาวน์โหลด PDF' }));
+    }
+    if (p.status !== 'working') side.append(h('button', { className: 'small', textContent: 'ลบ', onclick: () => removePdf(p.id) }));
+    return h('li', { className: 'item pdf' }, h('div', {}, h('div', { className: 'name', textContent: p.name }), line), side);
+  }));
 }
 
 // ---------- การวาดหน้าจอ ----------
@@ -208,6 +266,7 @@ function renderItem(item) {
     stateLine.classList.add('ok');
     stateLine.textContent = `เสร็จแล้ว ใช้เวลา ${fmtTime(r.ms)} · ${r.format.toUpperCase()} ${fmtBytes(r.bytes)}`;
     side.append(h('a', { className: 'btn', href: r.url, download: r.name, textContent: 'ดาวน์โหลด' }),
+      h('button', { className: 'small', textContent: 'ทำ PDF', disabled: state.running, onclick: () => requestPdf(r.blob, r.name) }),
       h('button', { className: 'small', textContent: 'ดูเทียบ', onclick: () => { state.selectedId = item.id; render(); el.previewCard.scrollIntoView({ behavior: 'smooth' }); } }));
   } else if (item.status === 'working') {
     const plan = planFor(item);
@@ -275,6 +334,7 @@ function render() {
   el.clearBtn.hidden = state.running || state.items.length === 0;
   renderPreview();
   renderEngine();
+  renderPdf();
 }
 
 // ---------- การผูกปุ่มและช่องกรอก ----------
@@ -289,6 +349,9 @@ el.longSide.oninput = () => { state.setting = { ...state.setting, mode: 'longSid
 el.forceCpu.onchange = () => { state.forceCpu = el.forceCpu.checked; renderEngine(); };
 for (const r of document.querySelectorAll('input[name=format]')) r.onchange = () => { if (r.checked) state.format = r.value; };
 el.fileInput.onchange = () => { addFiles(el.fileInput.files); el.fileInput.value = ''; };
+el.pdfLongCm.oninput = () => { state.pdfLongCm = el.pdfLongCm.value; renderPdf(); };
+el.pdfPickBtn.onclick = () => { if (pdfLongCm()) el.pdfFileInput.click(); else { el.pdfLongCm.focus(); renderPdf(); } };
+el.pdfFileInput.onchange = () => { const f = el.pdfFileInput.files[0]; el.pdfFileInput.value = ''; if (f) requestPdf(f, f.name); };
 el.startBtn.onclick = start;
 el.cancelBtn.onclick = cancel;
 el.clearBtn.onclick = clearAll;
@@ -304,6 +367,6 @@ el.slider.oninput = () => {
   el.beforeImg.style.clipPath = `inset(0 ${100 - v}% 0 0)`;
   el.divider.style.left = `${v}%`;
 };
-window.addEventListener('beforeunload', (e) => { if (state.running) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', (e) => { if (state.running || state.pdfs.some((p) => p.status === 'working')) { e.preventDefault(); e.returnValue = ''; } });
 
 render();

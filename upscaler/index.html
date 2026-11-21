@@ -55,6 +55,20 @@
       <p id="empty" class="muted">ยังไม่ได้เลือกรูป</p>
     </section>
 
+    <section class="card">
+      <h2>4. ทำไฟล์ PDF ส่งร้านพิมพ์ (ถ้าร้านขอ)</h2>
+      <p class="muted">ได้ PDF 1 หน้า ขนาดเท่างานพิมพ์จริง มีรูปเต็มหน้า — ใช้กับรูปที่ขยายเสร็จในข้อ 3 (กดปุ่ม "ทำ PDF" ที่รูปนั้น) หรือรูปที่ดาวน์โหลดเก็บไว้แล้วก็ได้</p>
+      <div class="row">
+        <label class="inline">ด้านยาวของงานพิมพ์
+          <input type="number" id="pdfLongCm" min="1" step="0.1" placeholder="เช่น 150" inputmode="decimal"> ซม.
+        </label>
+        <button id="pdfPickBtn" type="button">เลือกรูปจากเครื่อง</button>
+        <input id="pdfFileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+      </div>
+      <p id="pdfHint" class="muted"></p>
+      <ul id="pdfItems" class="items"></ul>
+    </section>
+
     <section id="previewCard" class="card" hidden>
       <h2>เปรียบเทียบ ก่อน / หลัง</h2>
       <p id="previewNote" class="muted"></p>

@@ -2,6 +2,7 @@
 import * as ort from '../vendor/ort/ort.webgpu.bundle.min.mjs';
 import { CONFIG } from './config.js';
 import { planSteps, tileGrid, countTiles } from './tiling.js';
+import { pageSizeCm, parseJpeg, buildPdf } from './pdf.js';
 
 const SCALE = CONFIG.model.scale;
 const base = new URL('../', import.meta.url);
@@ -292,6 +293,38 @@ async function runJob(job) {
   }
 }
 
+// ---------- ทำไฟล์ PDF สำหรับส่งร้านพิมพ์ ----------
+async function makePdf(job) {
+  try {
+    let jpeg = null, w = 0, h = 0, reencoded = false;
+    if (job.file.type === 'image/jpeg') {
+      const info = parseJpeg(new Uint8Array(await job.file.slice(0, 4 * 1024 * 1024).arrayBuffer()));
+      // JPG สี RGB ปกติ ฝังลง PDF ได้ทั้งก้อนโดยไม่บีบซ้ำ
+      if (info && info.comps === 3 && !info.exif) { jpeg = job.file; w = info.w; h = info.h; }
+    }
+    if (!jpeg) {
+      let bmp;
+      try { bmp = await createImageBitmap(job.file); }
+      catch (e) { throw new Error('เปิดไฟล์ภาพนี้ไม่ได้ (รองรับ JPG, PNG, WebP)'); }
+      w = bmp.width; h = bmp.height;
+      const c = makeCanvas(w, h);
+      try {
+        c.ctx.fillStyle = '#fff';            // PDF แบบนี้เก็บความโปร่งใสไม่ได้ จึงรองพื้นขาว
+        c.ctx.fillRect(0, 0, w, h);
+        c.ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+        jpeg = await c.canvas.convertToBlob({ type: 'image/jpeg', quality: CONFIG.output.pdfJpegQuality });
+      } finally { freeCanvas(c); }
+      reencoded = true;
+    }
+    const page = pageSizeCm(w, h, job.longCm);
+    const blob = buildPdf(jpeg, w, h, page.wCm, page.hCm);
+    post({ type: 'pdfDone', id: job.id, blob, width: w, height: h, reencoded, ...page });
+  } catch (e) {
+    post({ type: 'pdfError', id: job.id, message: e?.message || String(e) });
+  }
+}
+
 function post(msg) { self.postMessage(msg); }
 
 let queue = Promise.resolve();
@@ -299,6 +332,7 @@ self.onmessage = (ev) => {
   const msg = ev.data;
   if (msg.type === 'cancel') cancelRequested = true;
   else if (msg.type === 'run') queue = queue.then(() => runJob(msg.job));
+  else if (msg.type === 'pdf') queue = queue.then(() => makePdf(msg.job));
   else if (msg.type === 'warmup') queue = queue.then(() => ensureEngine().catch(e =>
     post({ type: 'engineError', message: e?.message || String(e) })));
 };

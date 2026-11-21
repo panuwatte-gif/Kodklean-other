@@ -67,3 +67,5 @@ progress { width: 100%; height: 8px; margin-top: 4px; accent-color: var(--accent
 footer { margin-top: 18px; }
 @media (max-width: 520px) { .item { grid-template-columns: 48px 1fr; } .item .side { grid-column: 1 / -1; justify-content: flex-start; }
   .item img.thumb { width: 48px; height: 48px; } }
+.item.pdf { grid-template-columns: 1fr auto; }
+@media (max-width: 520px) { .item.pdf { grid-template-columns: 1fr; } }

@@ -20,6 +20,7 @@ export const CONFIG = {
 
   output: {
     jpegQuality: 0.95,
+    pdfJpegQuality: 0.95,         // คุณภาพรูปใน PDF เมื่อต้องแปลงจาก PNG/WebP (JPG ถูกฝังตามเดิมไม่บีบซ้ำ)
     previewMaxPixels: 30_000_000, // ผลลัพธ์ใหญ่กว่านี้จะแสดงตัวอย่างแบบย่อ
     previewMaxSide: 4096,
   },
