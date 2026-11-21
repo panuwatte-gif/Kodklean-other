@@ -16,8 +16,14 @@ export function targetSize(srcW, srcH, setting, limits) {
   const factor = w / srcW;
   if (factor <= 1) return { error: 'ขนาดที่ตั้งไว้ไม่ใหญ่กว่าต้นฉบับ' };
   if (factor > limits.maxFactor + 1e-9) return { error: `ขยายได้สูงสุด ${limits.maxFactor} เท่าของต้นฉบับ` };
-  if (Math.max(w, h) > limits.maxSide) return { error: `ด้านยาวเกิน ${limits.maxSide.toLocaleString()} พิกเซล — ลดขนาดลง` };
-  if (w * h > limits.maxPixels) return { error: `ภาพผลลัพธ์ใหญ่เกิน ${Math.round(limits.maxPixels / 1e6)} ล้านพิกเซล — ลดขนาดลง` };
+  if (Math.max(w, h) > limits.maxSide || w * h > limits.maxPixels) {
+    // บอกผู้ใช้ว่ารูปนี้ขยายได้มากสุดเท่าไร แทนที่จะบอกแค่ว่าเกิน
+    const long = Math.max(srcW, srcH), short = Math.min(srcW, srcH);
+    const maxLong = Math.floor(Math.min(limits.maxSide, Math.sqrt(limits.maxPixels * long / short)));
+    const maxF = Math.floor((maxLong / long) * 10) / 10;
+    if (maxF <= 1) return { error: 'รูปนี้ใหญ่มากอยู่แล้ว เบราว์เซอร์ขยายเพิ่มไม่ได้' };
+    return { error: `ใหญ่เกินที่เบราว์เซอร์รับได้ — รูปนี้ขยายได้สูงสุด ${maxF} เท่า (กรอก "กำหนดด้านยาวเอง" ได้ไม่เกิน ${maxLong.toLocaleString()} พิกเซล)` };
+  }
   return { w, h, factor, warn: w * h > limits.warnPixels };
 }
 
