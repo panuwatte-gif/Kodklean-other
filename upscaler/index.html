@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ขยายภาพให้คมชัด</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ขยายภาพให้คมชัด</h1>
+      <p class="lead">ประมวลผลในเครื่องของคุณเอง รูปไม่ถูกส่งออกไปที่ใด ไม่มีค่าใช้จ่าย ไม่จำกัดจำนวนรูป</p>
+    </header>
+
+    <section class="card">
+      <h2>1. เลือกรูป</h2>
+      <label id="dropzone" class="dropzone" for="fileInput">
+        <strong>ลากรูปมาวางที่นี่ หรือกดเพื่อเลือกไฟล์</strong>
+        <span>เลือกได้หลายรูปพร้อมกัน (JPG, PNG, WebP)</span>
+      </label>
+      <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+    </section>
+
+    <section class="card">
+      <h2>2. ตั้งค่าขนาดผลลัพธ์</h2>
+      <div class="row">
+        <div id="scaleChoices" class="seg" role="radiogroup" aria-label="จำนวนเท่า"></div>
+        <label class="inline">
+          <input type="radio" name="mode" id="modeLongSide" value="longSide">
+          กำหนดด้านยาวเอง
+          <input type="number" id="longSide" min="1" step="1" placeholder="เช่น 6000" inputmode="numeric"> พิกเซล
+        </label>
+      </div>
+      <div class="row">
+        <span class="label">ชนิดไฟล์</span>
+        <label class="inline"><input type="radio" name="format" value="png" checked> PNG (คมสุด ไฟล์ใหญ่)</label>
+        <label class="inline"><input type="radio" name="format" value="jpg"> JPG (ไฟล์เล็กกว่า)</label>
+      </div>
+      <details>
+        <summary>ตั้งค่าเพิ่มเติม</summary>
+        <label class="inline"><input type="checkbox" id="forceCpu"> ใช้ CPU เท่านั้น (เลือกเมื่อภาพผลลัพธ์สีเพี้ยนหรือมีลายผิดปกติ)</label>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>3. ขยายภาพ</h2>
+      <div class="actions">
+        <button id="startBtn" class="primary" disabled>เริ่มขยายภาพ</button>
+        <button id="cancelBtn" hidden>หยุด</button>
+        <button id="clearBtn" hidden>ล้างรายการ</button>
+      </div>
+      <p id="status" class="status" aria-live="polite"></p>
+      <ul id="items" class="items"></ul>
+      <p id="empty" class="muted">ยังไม่ได้เลือกรูป</p>
+    </section>
+
+    <section id="previewCard" class="card" hidden>
+      <h2>เปรียบเทียบ ก่อน / หลัง</h2>
+      <p id="previewNote" class="muted"></p>
+      <div id="compare" class="compare">
+        <img id="afterImg" alt="ภาพหลังขยาย">
+        <img id="beforeImg" alt="ภาพต้นฉบับ">
+        <div id="divider" class="divider"></div>
+        <span class="tag left">ก่อน</span><span class="tag right">หลัง</span>
+        <input id="slider" type="range" min="0" max="100" value="50" aria-label="เลื่อนเพื่อเปรียบเทียบ">
+      </div>
+    </section>
+
+    <footer>
+      <p id="engineInfo" class="muted"></p>
+      <p class="muted">ใช้โมเดล Real-ESRGAN (realesr-general-x4v3, BSD-3-Clause) และ ONNX Runtime Web (MIT)</p>
+    </footer>
+  </main>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
