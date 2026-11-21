@@ -8,7 +8,8 @@ ensureIsolation();
 const $ = (id) => document.getElementById(id);
 const el = {
   dropzone: $('dropzone'), fileInput: $('fileInput'), scaleChoices: $('scaleChoices'),
-  modeLongSide: $('modeLongSide'), longSide: $('longSide'), forceCpu: $('forceCpu'),
+  modeLongSide: $('modeLongSide'), longSide: $('longSide'), modeFactor: $('modeFactor'),
+  modePrint: $('modePrint'), printCm: $('printCm'), printDpi: $('printDpi'), scaleHint: $('scaleHint'), forceCpu: $('forceCpu'),
   startBtn: $('startBtn'), cancelBtn: $('cancelBtn'), clearBtn: $('clearBtn'),
   status: $('status'), items: $('items'), empty: $('empty'), engineInfo: $('engineInfo'),
   previewCard: $('previewCard'), previewNote: $('previewNote'), afterImg: $('afterImg'),
@@ -19,7 +20,7 @@ const el = {
 
 const state = {
   items: [],            // {id,file,name,w,h,srcUrl,status,done,total,elapsed,result,error}
-  setting: { mode: 'factor', factor: CONFIG.defaultScale, longSide: '' },
+  setting: { mode: 'factor', factor: CONFIG.defaultScale, longSide: '', printCm: '', printDpi: String(CONFIG.defaultDpi) },
   format: 'png',
   forceCpu: false,
   running: false,
@@ -79,6 +80,7 @@ async function addFiles(fileList) {
     state.items.push(item);
   }
   getWorker().postMessage({ type: 'warmup' });
+  fixFactor();
   render();
 }
 
@@ -96,6 +98,7 @@ function removeItem(id) {
   URL.revokeObjectURL(state.items[i].srcUrl);
   state.items.splice(i, 1);
   if (state.selectedId === id) state.selectedId = null;
+  fixFactor();
   render();
 }
 
@@ -111,9 +114,22 @@ function retryItem(id) {
 // ---------- การทำงานหลัก ----------
 const planFor = (item) => targetSize(item.w, item.h, state.setting, CONFIG.limits);
 
+// ปุ่มจำนวนเท่าไหนใช้กับรูปที่รออยู่ได้บ้าง (ยังไม่มีรูป = ใช้ได้ทุกปุ่ม)
+function factorUsable(f) {
+  const waiting = state.items.filter((i) => i.status === 'pending' && i.w);
+  return !waiting.length || waiting.some((i) => !targetSize(i.w, i.h, { mode: 'factor', factor: f }, CONFIG.limits).error);
+}
+// ถ้าจำนวนเท่าที่เลือกอยู่ใช้กับรูปที่ใส่มาไม่ได้ ให้เลื่อนไปค่าที่มากที่สุดที่ใช้ได้
+function fixFactor() {
+  if (state.setting.mode !== 'factor' || factorUsable(state.setting.factor)) return;
+  const ok = CONFIG.scaleChoices.filter(factorUsable);
+  if (ok.length) state.setting = { ...state.setting, factor: Math.max(...ok) };
+}
+
 function outputName(item, format) {
   const stem = item.name.replace(/\.[^.]+$/, '');
-  const tag = state.setting.mode === 'longSide' ? `${Math.max(item.result.width, item.result.height)}px` : `x${state.setting.factor}`;
+  const tag = state.setting.mode === 'longSide' ? `${Math.max(item.result.width, item.result.height)}px`
+    : state.setting.mode === 'print' ? `${Number(state.setting.printDpi)}dpi` : `x${state.setting.factor}`;
   return `${stem}_${tag}.${format}`;
 }
 
@@ -314,12 +330,19 @@ function renderEngine() {
 }
 
 function renderSettings() {
+  const blocked = CONFIG.scaleChoices.filter((f) => !factorUsable(f));
   for (const b of el.scaleChoices.children) {
-    b.setAttribute('aria-checked', String(state.setting.mode === 'factor' && Number(b.dataset.factor) === state.setting.factor));
-    b.disabled = state.running;
+    const f = Number(b.dataset.factor);
+    b.setAttribute('aria-checked', String(state.setting.mode === 'factor' && f === state.setting.factor));
+    b.disabled = state.running || blocked.includes(f);
+    b.title = blocked.includes(f) ? 'รูปที่เลือกใหญ่เกินกว่าจะขยายเท่านี้ได้' : '';
   }
+  el.scaleHint.textContent = !blocked.length ? ''
+    : `ปุ่ม ${blocked.join(', ')} เท่าถูกปิด เพราะรูปที่เลือกใหญ่อยู่แล้ว ขยายเท่านั้นจะเกินขนาดที่เบราว์เซอร์รับได้ (จำนวนเท่ามาก ๆ มีไว้สำหรับรูปเล็ก) — งานส่งร้านพิมพ์ให้ใช้ "ตามขนาดงานพิมพ์"`;
   el.modeLongSide.checked = state.setting.mode === 'longSide';
-  for (const c of [el.modeLongSide, el.longSide, el.forceCpu, ...document.querySelectorAll('input[name=format]')]) c.disabled = state.running;
+  el.modeFactor.checked = state.setting.mode === 'factor';
+  el.modePrint.checked = state.setting.mode === 'print';
+  for (const c of [el.modeLongSide, el.longSide, el.modeFactor, el.modePrint, el.printCm, el.printDpi, el.forceCpu, ...document.querySelectorAll('input[name=format]')]) c.disabled = state.running;
 }
 
 function render() {
@@ -346,6 +369,15 @@ for (const f of CONFIG.scaleChoices) {
 }
 el.modeLongSide.onchange = () => { state.setting = { ...state.setting, mode: 'longSide' }; render(); el.longSide.focus(); };
 el.longSide.oninput = () => { state.setting = { ...state.setting, mode: 'longSide', longSide: el.longSide.value }; render(); };
+el.modeFactor.onchange = () => { state.setting = { ...state.setting, mode: 'factor' }; fixFactor(); render(); };
+el.modePrint.onchange = () => { state.setting = { ...state.setting, mode: 'print' }; render(); el.printCm.focus(); };
+el.printDpi.value = state.setting.printDpi;
+el.printCm.oninput = () => {
+  state.setting = { ...state.setting, mode: 'print', printCm: el.printCm.value };
+  state.pdfLongCm = el.printCm.value; el.pdfLongCm.value = el.printCm.value;   // ใช้ขนาดเดียวกันตอนทำ PDF
+  render();
+};
+el.printDpi.oninput = () => { state.setting = { ...state.setting, mode: 'print', printDpi: el.printDpi.value }; render(); };
 el.forceCpu.onchange = () => { state.forceCpu = el.forceCpu.checked; renderEngine(); };
 for (const r of document.querySelectorAll('input[name=format]')) r.onchange = () => { if (r.checked) state.format = r.value; };
 el.fileInput.onchange = () => { addFiles(el.fileInput.files); el.fileInput.value = ''; };

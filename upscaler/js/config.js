@@ -17,6 +17,7 @@ export const CONFIG = {
 
   scaleChoices: [2, 4, 8, 16],
   defaultScale: 4,
+  defaultDpi: 300,        // ค่า DPI ตั้งต้นของโหมด "ตามขนาดงานพิมพ์"
 
   output: {
     jpegQuality: 0.95,

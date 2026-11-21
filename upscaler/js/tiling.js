@@ -3,9 +3,17 @@
 /** คำนวณขนาดผลลัพธ์จากการตั้งค่า  คืน {w,h} หรือ {error} */
 export function targetSize(srcW, srcH, setting, limits) {
   let w, h;
-  if (setting.mode === 'longSide') {
-    const side = Math.round(Number(setting.longSide));
-    if (!Number.isFinite(side) || side <= 0) return { error: 'กรุณากรอกขนาดด้านยาวเป็นตัวเลข' };
+  const cm = Number(setting.printCm), dpi = Number(setting.printDpi);
+  if (setting.mode === 'longSide' || setting.mode === 'print') {
+    let side;
+    if (setting.mode === 'print') {
+      // ขนาดงานพิมพ์: พิกเซล = ซม. ÷ 2.54 × DPI
+      if (!(cm > 0) || !(dpi > 0)) return { error: 'กรุณากรอกด้านยาวของงานพิมพ์ (ซม.) และ DPI' };
+      side = Math.round((cm / 2.54) * dpi);
+    } else {
+      side = Math.round(Number(setting.longSide));
+      if (!Number.isFinite(side) || side <= 0) return { error: 'กรุณากรอกขนาดด้านยาวเป็นตัวเลข' };
+    }
     const f = side / Math.max(srcW, srcH);
     w = Math.max(1, Math.round(srcW * f));
     h = Math.max(1, Math.round(srcH * f));
@@ -14,7 +22,13 @@ export function targetSize(srcW, srcH, setting, limits) {
     h = srcH * setting.factor;
   }
   const factor = w / srcW;
-  if (factor <= 1) return { error: 'ขนาดที่ตั้งไว้ไม่ใหญ่กว่าต้นฉบับ' };
+  if (factor <= 1) {
+    if (setting.mode === 'print') {
+      const has = Math.round(Math.max(srcW, srcH) / (cm / 2.54));
+      return { error: `รูปนี้ละเอียดพอสำหรับงาน ${cm} ซม. อยู่แล้ว (${has} DPI) ไม่ต้องขยาย — ทำ PDF จากรูปนี้ได้เลยในข้อ 4` };
+    }
+    return { error: 'ขนาดที่ตั้งไว้ไม่ใหญ่กว่าต้นฉบับ' };
+  }
   if (factor > limits.maxFactor + 1e-9) return { error: `ขยายได้สูงสุด ${limits.maxFactor} เท่าของต้นฉบับ` };
   if (Math.max(w, h) > limits.maxSide || w * h > limits.maxPixels) {
     // บอกผู้ใช้ว่ารูปนี้ขยายได้มากสุดเท่าไร แทนที่จะบอกแค่ว่าเกิน
@@ -22,6 +36,9 @@ export function targetSize(srcW, srcH, setting, limits) {
     const maxLong = Math.floor(Math.min(limits.maxSide, Math.sqrt(limits.maxPixels * long / short)));
     const maxF = Math.floor((maxLong / long) * 10) / 10;
     if (maxF <= 1) return { error: 'รูปนี้ใหญ่มากอยู่แล้ว เบราว์เซอร์ขยายเพิ่มไม่ได้' };
+    if (setting.mode === 'print') {
+      return { error: `ใหญ่เกินที่เบราว์เซอร์รับได้ — งานพิมพ์ ${cm} ซม. จากรูปนี้ทำได้สูงสุด ${Math.floor(maxLong / (cm / 2.54))} DPI` };
+    }
     return { error: `ใหญ่เกินที่เบราว์เซอร์รับได้ — รูปนี้ขยายได้สูงสุด ${maxF} เท่า (กรอก "กำหนดด้านยาวเอง" ได้ไม่เกิน ${maxLong.toLocaleString()} พิกเซล)` };
   }
   return { w, h, factor, warn: w * h > limits.warnPixels };

@@ -69,3 +69,5 @@ footer { margin-top: 18px; }
   .item img.thumb { width: 48px; height: 48px; } }
 .item.pdf { grid-template-columns: 1fr auto; }
 @media (max-width: 520px) { .item.pdf { grid-template-columns: 1fr; } }
+input[type=number].narrow { width: 5em; }
+.seg button:disabled { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
